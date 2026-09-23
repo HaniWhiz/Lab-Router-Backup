@@ -1,0 +1,134 @@
+en
+conf t
+hostname vIOS-7
+no ip domain lookup
+ip domain name lab.local
+ipv6 unicast-routing
+!
+interface Loopback255
+ description Underlay / BGP source
+ ipv6 address 2001:DB8:1:FFFF::7/128
+ ipv6 router isis
+ exit
+!
+interface GigabitEthernet0/0
+ description to DC1-R1
+ no ip address
+ ipv6 address 2001:DB8:1:DC1::170B/127
+ ipv6 router isis
+ isis network point-to-point
+ isis circuit-type level-2-only
+ isis ipv6 metric 10 level-2
+ no shutdown
+ exit
+!
+interface GigabitEthernet0/1
+ description to DC1-R2
+ no ip address
+ ipv6 address 2001:DB8:1:DC1::270B/127
+ ipv6 router isis
+ isis network point-to-point
+ isis circuit-type level-2-only
+ isis ipv6 metric 10 level-2
+ no shutdown
+ exit
+!
+interface GigabitEthernet0/2
+ description to DC2-R1
+ no ip address
+ ipv6 address 2001:DB8:1:DC2::370B/127
+ ipv6 router isis
+ isis network point-to-point
+ isis circuit-type level-2-only
+ isis ipv6 metric 10 level-2
+ no shutdown
+ exit
+!
+interface GigabitEthernet0/3
+ description to DC2-R2
+ no ip address
+ ipv6 address 2001:DB8:1:DC2::470B/127
+ ipv6 router isis
+ isis network point-to-point
+ isis circuit-type level-2-only
+ isis ipv6 metric 10 level-2
+ no shutdown
+ exit
+!
+interface GigabitEthernet0/4
+ description Syslog-Backup-Server (Linux)
+ no ip address
+ ipv6 address 2001:DB8:1:DC0::780A/127
+ no shutdown
+ exit
+!
+router isis
+ net 49.0000.0000.0000.0007.00
+ is-type level-1-2
+ metric-style wide
+ log-adjacency-changes
+ passive-interface Loopback255
+ passive-interface GigabitEthernet0/4
+ address-family ipv6
+  multi-topology
+  maximum-paths 4
+ exit-address-family
+ exit
+!
+router bgp 1.1
+ bgp asnotation dot
+ no bgp default ipv4-unicast
+ bgp log-neighbor-changes
+ bgp router-id 7.7.7.7
+ !
+ neighbor 2001:DB8:1:FFFF::1 remote-as 1.1
+ neighbor 2001:DB8:1:FFFF::1 update-source Loopback255
+ neighbor 2001:DB8:1:FFFF::2 remote-as 1.1
+ neighbor 2001:DB8:1:FFFF::2 update-source Loopback255
+ neighbor 2001:DB8:1:FFFF::3 remote-as 1.1
+ neighbor 2001:DB8:1:FFFF::3 update-source Loopback255
+ neighbor 2001:DB8:1:FFFF::4 remote-as 1.1
+ neighbor 2001:DB8:1:FFFF::4 update-source Loopback255
+ !
+ address-family ipv6 unicast
+  neighbor 2001:DB8:1:FFFF::1 activate
+  neighbor 2001:DB8:1:FFFF::2 activate
+  neighbor 2001:DB8:1:FFFF::3 activate
+  neighbor 2001:DB8:1:FFFF::4 activate
+ exit-address-family
+ exit
+!
+clock timezone TEHRAN 3 30
+service timestamps debug datetime msec localtime show-timezone
+service timestamps log datetime msec localtime show-timezone
+logging buffered 32768 informational
+logging origin-id hostname
+logging source-interface Loopback255
+logging trap informational
+logging host ipv6 2001:DB8:1:DC0::780B
+!
+username backup privilege 15 secret 0 L4bBackup!2026
+aaa new-model
+aaa authentication login default local
+aaa authorization exec default local
+!
+crypto key generate rsa modulus 2048
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+ip scp server enable
+!
+ipv6 access-list MGMT-IN
+ permit ipv6 host 2001:DB8:1:DC0::780B any
+ deny ipv6 any any log
+ exit
+!
+line vty 0 4
+ exec-timeout 15 0
+ ipv6 access-class MGMT-IN in
+ transport input ssh
+ transport output ssh
+ exit
+!
+end
+wr

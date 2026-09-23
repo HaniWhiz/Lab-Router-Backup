@@ -1,0 +1,67 @@
+#alpine-Bash
+
+ip link set eth0 up
+ip -6 addr add 2001:DB8:1:DC0::780B/127 dev eth0
+ip link set eth1 up
+udhcpc -i eth1
+
+apk update
+apk upgrade -y
+
+apk add git nano sshpass
+
+
+
+
+cat <<'EOF' > /root/cfg-bu.sh
+#!/bin/sh
+
+PASSWORD='L4bBackup!2026'
+BACKUP_DIR='/root/cisco-backups'
+
+mkdir -p "$BACKUP_DIR"
+
+for i in 1 2 3 4
+do
+    sshpass -p "$PASSWORD" scp -O -6 \
+        -o KexAlgorithms=+diffie-hellman-group14-sha1 \
+        -o HostKeyAlgorithms=+ssh-rsa \
+        -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile=/dev/null \
+        "backup@[2001:db8:1:ffff::$i]:running-config" \
+        "$BACKUP_DIR/R$i-config.cfg"
+done
+EOF
+
+chmod 700 /root/cisco-backup.sh
+
+
+echo '*/30 * * * * /root/cfg-bu.sh' | crontab -
+
+
+
+git clone https://github.com/haniwhiz/Lab-Router-Backup.git
+cd Lab-Router-Backup
+
+git init
+git branch -M main
+
+git config user.name "haniwhiz"
+git config user.email "hanihaidary454545@gmail.com"
+
+
+cp -a /root/cfg-bu /root/Lab-Router-Backup/
+
+cd /root/Lab-Router-Backup
+git add cfg-bu/
+git commit -m "commit3"
+git push
+
+
+
+
+
+
+ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 \
+    -o HostKeyAlgorithms=+ssh-rsa \
+    backup@2001:db8:1:ffff::1
