@@ -99,13 +99,9 @@ router bgp 1.1
  address-family ipv6 unicast
   network 2001:DB8:1::/48
   neighbor 2001:DB8:1:FFFF::1 activate
-  neighbor 2001:DB8:1:FFFF::1 next-hop-self
   neighbor 2001:DB8:1:FFFF::2 activate
-  neighbor 2001:DB8:1:FFFF::2 next-hop-self
   neighbor 2001:DB8:1:FFFF::3 activate
-  neighbor 2001:DB8:1:FFFF::3 next-hop-self
   neighbor 2001:DB8:1:FFFF::7 activate
-  neighbor 2001:DB8:1:FFFF::7 next-hop-self
   neighbor FD45:1::A activate
   neighbor FD45:1::A route-map OUR-PREFIX-OUT out
   neighbor FD46:1::A activate
