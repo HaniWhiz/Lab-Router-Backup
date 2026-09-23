@@ -61,6 +61,93 @@ git push
 
 
 
+#!/bin/sh
+# General syslog receiver for Alpine Linux in EVE-NG (IPv4 + IPv6)
+# Safe to re-run. Logs land in /var/log/network/<device>.log and all.log
+
+LOGDIR=/var/log/network
+CONF=/etc/rsyslog.d/10-network.conf
+
+[ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
+
+echo "== 1. install =="
+apk info -e rsyslog   >/dev/null 2>&1 || apk add --no-cache rsyslog
+apk info -e logrotate >/dev/null 2>&1 || apk add --no-cache logrotate
+command -v netstat    >/dev/null 2>&1 || apk add --no-cache net-tools
+command -v rsyslogd   >/dev/null 2>&1 || { echo "rsyslog missing - no internet on eth0?"; exit 1; }
+
+echo "== 2. stop busybox syslogd =="
+# busybox syslogd cannot receive remote syslog
+rc-service syslog stop      >/dev/null 2>&1
+rc-update del syslog default >/dev/null 2>&1
+
+echo "== 3. directories =="
+mkdir -p "$LOGDIR" /etc/rsyslog.d /var/spool/rsyslog
+
+echo "== 4. config =="
+cat > "$CONF" <<'EOF'
+module(load="imudp")
+input(type="imudp" port="514" address="::" ratelimit.interval="0")
+module(load="imptcp")
+input(type="imptcp" port="514")
+
+global(workDirectory="/var/spool/rsyslog")
+global(preserveFQDN="on")
+
+template(name="PerDeviceFile" type="string"
+         string="/var/log/network/%HOSTNAME%.log")
+
+template(name="DeviceLine" type="string"
+         string="%timegenerated:::date-rfc3339% %fromhost-ip% %syslogseverity-text%: %msg:::sp-if-no-1st-sp,drop-last-lf%\n")
+
+template(name="AllLine" type="string"
+         string="%timegenerated:::date-rfc3339% %HOSTNAME% %fromhost-ip% %syslogseverity-text%: %msg:::sp-if-no-1st-sp,drop-last-lf%\n")
+
+# anything not from this box is a network device - no hardcoded prefix,
+# so re-addressing the lab will never break logging again
+if ($fromhost-ip != "127.0.0.1") and ($fromhost-ip != "::1") then {
+    action(type="omfile" dynaFile="PerDeviceFile" template="DeviceLine"
+           dirCreateMode="0755" fileCreateMode="0640")
+    action(type="omfile" file="/var/log/network/all.log" template="AllLine"
+           fileCreateMode="0640")
+    stop
+}
+EOF
+
+grep -q 'rsyslog\.d/\*\.conf' /etc/rsyslog.conf 2>/dev/null || \
+    echo 'include(file="/etc/rsyslog.d/*.conf" mode="optional")' >> /etc/rsyslog.conf
+
+echo "== 5. rotation =="
+cat > /etc/logrotate.d/network <<'EOF'
+/var/log/network/*.log {
+    daily
+    rotate 30
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    postrotate
+        rc-service rsyslog reload >/dev/null 2>&1 || true
+    endscript
+}
+EOF
+
+echo "== 6. start =="
+rsyslogd -N1 || { echo "CONFIG INVALID - stopping"; exit 1; }
+rc-update add rsyslog default >/dev/null 2>&1
+rc-service rsyslog restart
+sleep 2
+
+echo "== 7. verify =="
+netstat -lnup | grep ':514' || echo "  *** NOT LISTENING ON UDP 514 ***"
+netstat -lntp | grep ':514' || echo "  (no TCP 514)"
+logger -t SELFTEST ok; sleep 1
+tail -3 /var/log/messages
+ls -la "$LOGDIR"
+
+
+
 
 ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 \
     -o HostKeyAlgorithms=+ssh-rsa \
